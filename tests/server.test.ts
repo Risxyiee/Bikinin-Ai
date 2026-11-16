@@ -120,6 +120,7 @@ describe("web server", () => {
     expect(config).toContain("test-model");
     expect(config).not.toContain("SECRET_KEY_VALUE");
     expect(config).not.toContain("x.test");
+    expect((await fetch(`${url}/md.js`)).status).toBe(200);
   });
 
   it("runs an agent end to end and streams ordered SSE events", async () => {
