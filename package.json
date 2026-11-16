@@ -1,0 +1,25 @@
+{
+  "name": "bikinin-ai",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "dotenv": "18.0.10",
+    "openai": "7.57.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "prettier": "3.10.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}
