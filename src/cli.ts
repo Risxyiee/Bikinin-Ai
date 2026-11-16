@@ -1,6 +1,7 @@
 // Terminal entry point. Text mode renders events; --json prints NDJSON (one event per line).
 import { randomUUID } from "node:crypto";
 import { mkdir, realpath } from "node:fs/promises";
+import { assertWorkspaceIsolated } from "./safety/paths.js";
 import { createInterface } from "node:readline/promises";
 import { runAgent } from "./agent/loop.js";
 import { loadConfig } from "./config.js";
@@ -56,6 +57,7 @@ async function main(): Promise<number> {
   const cfg = loadConfig();
   await mkdir(cfg.BIKININ_WORKSPACE, { recursive: true });
   const workspace = await realpath(cfg.BIKININ_WORKSPACE);
+  await assertWorkspaceIsolated(workspace);
 
   const runId = `run_${randomUUID().slice(0, 8)}`;
   const sessionId = `s_${randomUUID().slice(0, 8)}`;

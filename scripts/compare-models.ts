@@ -1,5 +1,6 @@
 // Runs the same task on 2-3 configured providers (by name) in separate workspaces, then prints a table.
 import { mkdir, realpath } from "node:fs/promises";
+import { assertWorkspaceIsolated } from "../src/safety/paths.js";
 import { resolve } from "node:path";
 import { runAgent } from "../src/agent/loop.js";
 import { loadConfig } from "../src/config.js";
@@ -19,6 +20,9 @@ async function main(): Promise<number> {
   }
 
   const cfg = loadConfig();
+  await assertWorkspaceIsolated(
+    await realpath(cfg.BIKININ_WORKSPACE).catch(() => cfg.BIKININ_WORKSPACE),
+  );
   const systemPrompt = await loadSystemPrompt();
   const rows: Record<string, string | number>[] = [];
 

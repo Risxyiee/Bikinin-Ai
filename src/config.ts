@@ -1,5 +1,7 @@
 // Reads configuration from .env / process.env. Never logs values.
 import { config as loadDotenv } from "dotenv";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { z } from "zod";
 import { resolveProviders, type ProviderConfig } from "./llm/providers.js";
 
@@ -7,7 +9,10 @@ const LimitsSchema = z.object({
   BIKININ_USD_IDR: z.coerce.number().positive().default(17000),
   BIKININ_MAX_STEPS: z.coerce.number().int().positive().default(30),
   BIKININ_MAX_COST_USD: z.coerce.number().positive().default(0.5),
-  BIKININ_WORKSPACE: z.string().min(1).default("./workspace"),
+  BIKININ_WORKSPACE: z
+    .string()
+    .min(1)
+    .default(join(homedir(), "bikinin-workspace")),
   BIKININ_MAX_VIDEO_SECONDS: z.coerce.number().int().positive().default(30),
 });
 

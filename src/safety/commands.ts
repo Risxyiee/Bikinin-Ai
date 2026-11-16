@@ -17,6 +17,11 @@ const BLOCKED: Array<{ re: RegExp; reason: string }> = [
   { re: /(^|[\s>|])~/, reason: "path home (~) tidak diizinkan" },
   { re: /\$HOME|\$\{HOME\}/, reason: "referensi $HOME tidak diizinkan" },
   { re: /\bsudo\b/, reason: "sudo tidak diizinkan" },
+  {
+    re: /(^|[\s;&|])(git|gh|ssh|scp|rsync)(\s|$)/,
+    reason: "git/gh/ssh tidak diizinkan dari agent",
+  },
+  { re: /\bnpm\s+publish\b/, reason: "npm publish tidak diizinkan" },
   { re: /\bmkfs/, reason: "format disk" },
   { re: /\bdd\s+if=/, reason: "dd tidak diizinkan" },
   { re: /\b(shutdown|reboot|halt|poweroff)\b/, reason: "perintah sistem" },

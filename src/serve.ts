@@ -1,5 +1,6 @@
 // Web UI entry point: `npm run serve -- --port 3000`. Bind to localhost; Codespaces forwards the port.
 import { mkdir, realpath } from "node:fs/promises";
+import { assertWorkspaceIsolated } from "./safety/paths.js";
 import { loadConfig } from "./config.js";
 import { loadSystemPrompt } from "./prompt.js";
 import { createAppServer } from "./server/http.js";
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
   const cfg = loadConfig();
   await mkdir(cfg.BIKININ_WORKSPACE, { recursive: true });
   const workspace = await realpath(cfg.BIKININ_WORKSPACE);
+  await assertWorkspaceIsolated(workspace);
   const manager = new RunManager(cfg, {
     workspace,
     systemPrompt: await loadSystemPrompt(),

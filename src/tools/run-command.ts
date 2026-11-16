@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { dirname } from "node:path";
 import { z } from "zod";
 import { AgentError } from "../errors.js";
 import { classifyCommand } from "../safety/commands.js";
@@ -31,7 +32,7 @@ function execShell(command: string, cwd: string): Promise<ShellResult> {
         cwd,
         timeout: TIMEOUT_MS,
         maxBuffer: MAX_BUFFER,
-        env: safeEnv(process.env),
+        env: { ...safeEnv(process.env), GIT_CEILING_DIRECTORIES: dirname(cwd) },
       },
       (error, stdout, stderr) => {
         const code =

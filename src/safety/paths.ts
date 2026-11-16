@@ -1,6 +1,6 @@
 // Every file operation resolves through here. Blocks traversal, absolute paths and symlink escapes.
 import { lstat, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { AgentError } from "../errors.js";
 
 function isInside(root: string, target: string): boolean {
@@ -68,4 +68,30 @@ export async function resolveInWorkspace(
     );
 
   return { abs, rel: relative(root, abs) || "." };
+}
+
+const PROJECT_MARKERS = [".git", "package.json"];
+
+/**
+ * The workspace must not sit inside a project. Otherwise tools like git or npm walk up
+ * and act on the app's own repository. Throws if any folder from the workspace upward
+ * contains a project marker. The message names the marker, never a full path.
+ */
+export async function assertWorkspaceIsolated(
+  workspace: string,
+): Promise<void> {
+  let cur = workspace;
+  for (;;) {
+    for (const marker of PROJECT_MARKERS) {
+      if (await pathExists(join(cur, marker))) {
+        throw new AgentError(
+          "path_blocked",
+          `workspace berada di dalam project (ditemukan ${marker}). Pakai folder di luar repo, misalnya ~/bikinin-workspace, lalu atur BIKININ_WORKSPACE.`,
+        );
+      }
+    }
+    const parent = dirname(cur);
+    if (parent === cur) return;
+    cur = parent;
+  }
 }
