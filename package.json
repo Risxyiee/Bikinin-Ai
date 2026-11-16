@@ -12,7 +12,8 @@
     "format": "prettier --write .",
     "cli": "tsx src/cli.ts",
     "check-provider": "tsx scripts/check-provider.ts",
-    "compare": "tsx scripts/compare-models.ts"
+    "compare": "tsx scripts/compare-models.ts",
+    "serve": "tsx src/serve.ts"
   },
   "dependencies": {
     "dotenv": "18.0.10",

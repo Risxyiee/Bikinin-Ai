@@ -1,0 +1,169 @@
+// Keeps runs in memory for the web UI: event buffer, live listeners, pending approvals, stop.
+// One active run at a time, because all runs share one workspace.
+import { randomUUID } from "node:crypto";
+import {
+  runAgent,
+  type AgentDeps,
+  type ApprovalRequest,
+  type EmitFn,
+} from "../agent/loop.js";
+import type { Config } from "../config.js";
+import type { z } from "zod";
+import { createEmitter, StartRunBody, type AgentEvent } from "../events.js";
+import type { LlmClient } from "../llm/client.js";
+import { createFallbackLlm } from "../llm/fallback.js";
+
+export interface RunRecord {
+  runId: string;
+  sessionId: string;
+  events: AgentEvent[];
+  finished: boolean;
+  listeners: Set<(e: AgentEvent) => void>;
+  abort: AbortController;
+  pending: Map<string, (allow: boolean) => void>;
+}
+
+export interface RunManagerOptions {
+  workspace: string; // absolute realpath
+  systemPrompt: string;
+  llm?: LlmClient; // tests inject a fake; production uses the provider list
+}
+
+export class BusyError extends Error {}
+
+export class RunManager {
+  private readonly runs = new Map<string, RunRecord>();
+  private activeRunId: string | null = null;
+
+  constructor(
+    private readonly cfg: Config,
+    private readonly opts: RunManagerOptions,
+  ) {}
+
+  /** Public, non-secret settings for the UI. Never includes keys or URLs. */
+  info() {
+    const primary = this.cfg.providers[0];
+    return {
+      model: primary.model,
+      usd_idr: this.cfg.BIKININ_USD_IDR,
+      max_steps: this.cfg.BIKININ_MAX_STEPS,
+      max_cost_usd: this.cfg.BIKININ_MAX_COST_USD,
+    };
+  }
+
+  get(runId: string): RunRecord | undefined {
+    return this.runs.get(runId);
+  }
+
+  start(body: z.infer<typeof StartRunBody>): {
+    run_id: string;
+    session_id: string;
+  } {
+    if (this.activeRunId !== null)
+      throw new BusyError("masih ada run yang berjalan");
+
+    const runId = `run_${randomUUID().slice(0, 8)}`;
+    const sessionId = body.session_id ?? `s_${randomUUID().slice(0, 8)}`;
+    const rec: RunRecord = {
+      runId,
+      sessionId,
+      events: [],
+      finished: false,
+      listeners: new Set(),
+      abort: new AbortController(),
+      pending: new Map(),
+    };
+    this.runs.set(runId, rec);
+    this.activeRunId = runId;
+
+    const emit: EmitFn = createEmitter(runId, (e) => {
+      rec.events.push(e);
+      if (e.type === "run_finished") rec.finished = true;
+      for (const listener of rec.listeners) listener(e);
+    });
+    const approve = (req: ApprovalRequest) =>
+      new Promise<boolean>((resolve) => {
+        rec.pending.set(req.approvalId, resolve);
+      });
+
+    void this.execute(rec, body.message, emit, approve).finally(() => {
+      for (const resolve of rec.pending.values()) resolve(false);
+      rec.pending.clear();
+      this.activeRunId = null;
+    });
+
+    return { run_id: runId, session_id: sessionId };
+  }
+
+  private async execute(
+    rec: RunRecord,
+    message: string,
+    emit: EmitFn,
+    approve: AgentDeps["approve"],
+  ): Promise<void> {
+    const primary = this.cfg.providers[0];
+    try {
+      await runAgent({
+        llm: this.opts.llm ?? createFallbackLlm(this.cfg.providers),
+        model: primary.model,
+        systemPrompt: this.opts.systemPrompt,
+        message,
+        sessionId: rec.sessionId,
+        workspace: this.opts.workspace,
+        limits: {
+          maxSteps: this.cfg.BIKININ_MAX_STEPS,
+          maxCostUsd: this.cfg.BIKININ_MAX_COST_USD,
+        },
+        prices: { inPerM: primary.inPerM, outPerM: primary.outPerM },
+        emit,
+        approve,
+        signal: rec.abort.signal,
+      });
+    } catch (err) {
+      // runAgent normally always emits run_finished; this is a last-resort guard.
+      if (!rec.finished) {
+        emit("error", {
+          code: "internal",
+          message: err instanceof Error ? err.message : String(err),
+          retryable: false,
+        });
+        emit("run_finished", {
+          status: "error",
+          summary: "Run berhenti karena error internal.",
+          totals: {
+            steps: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cached_tokens: 0,
+            cost_usd: 0,
+          },
+          duration_ms: 0,
+          resumable: false,
+        });
+      }
+    }
+  }
+
+  stop(runId: string): boolean {
+    const rec = this.runs.get(runId);
+    if (!rec) return false;
+    if (rec.finished) return true;
+    rec.abort.abort();
+    for (const resolve of rec.pending.values()) resolve(false);
+    rec.pending.clear();
+    return true;
+  }
+
+  approve(
+    runId: string,
+    approvalId: string,
+    decision: "allow" | "deny",
+  ): boolean {
+    const rec = this.runs.get(runId);
+    const resolve = rec?.pending.get(approvalId);
+    if (!rec || !resolve) return false;
+    rec.pending.delete(approvalId);
+    resolve(decision === "allow");
+    return true;
+  }
+}

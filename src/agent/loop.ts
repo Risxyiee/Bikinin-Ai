@@ -21,6 +21,7 @@ type Totals = RunFinished["totals"];
 type RunStatus = RunFinished["status"];
 
 export interface ApprovalRequest {
+  approvalId: string;
   command: string;
   reason: string;
   risk: "low" | "medium" | "high";
@@ -178,6 +179,7 @@ export async function runAgent(d: AgentDeps): Promise<AgentResult> {
         risk: verdict.risk,
       });
       const approved = await d.approve({
+        approvalId,
         command: verdict.command,
         reason: verdict.reason,
         risk: verdict.risk,
