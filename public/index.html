@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#02040a" />
+    <title>Bikinin AI</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true"></div>
+
+    <main class="app">
+      <header class="top">
+        <div class="brand">
+          <div class="gem" aria-hidden="true">◆</div>
+          <div>
+            <h1>Bikinin AI</h1>
+            <p class="sub" id="model">memuat…</p>
+          </div>
+        </div>
+        <div id="status" class="pill">
+          <span class="dot"></span>
+          <span id="statusText">Siap</span>
+        </div>
+      </header>
+
+      <section class="meters" aria-label="Pemakaian">
+        <div class="meter">
+          <span class="label">Langkah</span>
+          <strong id="steps">0 / 0</strong>
+          <div class="bar"><i id="stepsBar"></i></div>
+        </div>
+        <div class="meter">
+          <span class="label">Biaya</span>
+          <strong id="cost">$0.0000</strong>
+          <span class="rp" id="costIdr">≈ Rp 0</span>
+        </div>
+      </section>
+
+      <section id="feed" class="feed" aria-live="polite">
+        <div class="empty" id="empty">
+          <div class="emblem" aria-hidden="true">◆</div>
+          <h2>Mau dibuatkan apa?</h2>
+          <p>
+            Tulis di bawah, misalnya “landing page kedai kopi dengan nuansa biru
+            gelap”.
+          </p>
+        </div>
+      </section>
+
+      <section id="activity" class="panel hidden" aria-label="Langkah agent">
+        <h3>Langkah</h3>
+        <ol id="stepList" class="steps"></ol>
+      </section>
+
+      <section id="results" class="panel hidden" aria-label="Hasil">
+        <h3>Hasil</h3>
+        <ul id="fileList" class="files"></ul>
+        <div id="previewWrap" class="hidden">
+          <div class="preview-head">
+            <span>Pratinjau</span>
+            <a id="previewOpen" target="_blank" rel="noopener noreferrer"
+              >Buka di tab baru</a
+            >
+          </div>
+          <iframe
+            id="preview"
+            sandbox="allow-scripts"
+            title="Pratinjau hasil"
+            loading="lazy"
+          ></iframe>
+        </div>
+      </section>
+
+      <form id="composer" class="composer" autocomplete="off">
+        <textarea
+          id="input"
+          rows="1"
+          maxlength="8000"
+          placeholder="Apa yang mau dibuat?"
+          aria-label="Perintah"
+        ></textarea>
+        <button id="stop" type="button" class="btn ghost hidden">
+          Hentikan
+        </button>
+        <button id="send" type="submit" class="btn primary">Kirim</button>
+      </form>
+    </main>
+
+    <div
+      id="sheet"
+      class="sheet hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sheetTitle"
+    >
+      <div class="sheet-card">
+        <p class="kicker">Perlu persetujuanmu</p>
+        <h2 id="sheetTitle">Jalankan perintah ini?</h2>
+        <p id="sheetReason" class="muted"></p>
+        <pre id="sheetCmd"></pre>
+        <div class="sheet-actions">
+          <button id="deny" type="button" class="btn ghost">Tolak</button>
+          <button id="allow" type="button" class="btn primary">Izinkan</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden" role="status"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
