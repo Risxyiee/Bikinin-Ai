@@ -5,7 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { runAgent } from "./agent/loop.js";
 import { loadConfig } from "./config.js";
 import { createEmitter, toNDJSON, type AgentEvent } from "./events.js";
-import { createOpenAiLlm } from "./llm/client.js";
+import { createFallbackLlm } from "./llm/fallback.js";
 import { loadSystemPrompt } from "./prompt.js";
 
 function render(e: AgentEvent, usdIdr: number): void {
@@ -69,13 +69,11 @@ async function main(): Promise<number> {
   const controller = new AbortController();
   process.once("SIGINT", () => controller.abort());
 
+  const primary = cfg.providers[0];
   try {
     const result = await runAgent({
-      llm: createOpenAiLlm({
-        baseURL: cfg.LLM_BASE_URL,
-        apiKey: cfg.LLM_API_KEY,
-      }),
-      model: cfg.BIKININ_MODEL,
+      llm: createFallbackLlm(cfg.providers),
+      model: primary.model,
       systemPrompt: await loadSystemPrompt(),
       message,
       sessionId,
@@ -84,10 +82,7 @@ async function main(): Promise<number> {
         maxSteps: cfg.BIKININ_MAX_STEPS,
         maxCostUsd: cfg.BIKININ_MAX_COST_USD,
       },
-      prices: {
-        inPerM: cfg.PRICE_INPUT_PER_M,
-        outPerM: cfg.PRICE_OUTPUT_PER_M,
-      },
+      prices: { inPerM: primary.inPerM, outPerM: primary.outPerM },
       emit,
       approve: async (req) => {
         if (!rl) return false; // non-interactive: never approve

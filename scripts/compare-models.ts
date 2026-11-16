@@ -1,64 +1,64 @@
-// Runs the same task on 2-3 models in separate workspaces and prints a comparison table.
+// Runs the same task on 2-3 configured providers (by name) in separate workspaces, then prints a table.
 import { mkdir, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { runAgent } from "../src/agent/loop.js";
 import { loadConfig } from "../src/config.js";
 import { createEmitter, type AgentEvent } from "../src/events.js";
-import { createOpenAiLlm } from "../src/llm/client.js";
+import { createFallbackLlm } from "../src/llm/fallback.js";
 import { loadSystemPrompt } from "../src/prompt.js";
 
 const slug = (s: string) => s.replace(/[^a-zA-Z0-9]+/g, "-").slice(0, 40);
 
 async function main(): Promise<number> {
-  const [task, ...models] = process.argv.slice(2);
-  if (!task || models.length < 2 || models.length > 3) {
+  const [task, ...names] = process.argv.slice(2);
+  if (!task || names.length < 2 || names.length > 3) {
     console.error(
-      'Pemakaian: npm run compare -- "tugas" model-a model-b [model-c]',
+      'Pemakaian: npm run compare -- "tugas" nama-provider-a nama-provider-b [nama-provider-c]',
     );
     return 2;
   }
 
   const cfg = loadConfig();
-  const llm = createOpenAiLlm({
-    baseURL: cfg.LLM_BASE_URL,
-    apiKey: cfg.LLM_API_KEY,
-  });
   const systemPrompt = await loadSystemPrompt();
   const rows: Record<string, string | number>[] = [];
 
-  for (const model of models) {
+  for (const name of names) {
+    const provider = cfg.providers.find((p) => p.name === name);
+    if (!provider) {
+      console.error(
+        `Provider "${name}" tidak ada. Pilihan: ${cfg.providers.map((p) => p.name).join(", ")}`,
+      );
+      return 2;
+    }
     const dir = resolve(
       cfg.BIKININ_WORKSPACE,
       "compare",
-      `${slug(model)}-${Date.now()}`,
+      `${slug(name)}-${Date.now()}`,
     );
     await mkdir(dir, { recursive: true });
     const workspace = await realpath(dir);
-    const sessionId = `cmp_${slug(model)}`;
     const events: AgentEvent[] = [];
-    const emit = createEmitter(`run_${slug(model)}`, (e) => events.push(e));
+    const emit = createEmitter(`run_${slug(name)}`, (e) => events.push(e));
 
     const result = await runAgent({
-      llm,
-      model,
+      llm: createFallbackLlm([provider]), // no fallback during comparison: each provider runs alone
+      model: provider.model,
       systemPrompt,
       message: task,
-      sessionId,
+      sessionId: `cmp_${slug(name)}`,
       workspace,
       limits: {
         maxSteps: cfg.BIKININ_MAX_STEPS,
         maxCostUsd: cfg.BIKININ_MAX_COST_USD,
       },
-      prices: {
-        inPerM: cfg.PRICE_INPUT_PER_M,
-        outPerM: cfg.PRICE_OUTPUT_PER_M,
-      },
+      prices: { inPerM: provider.inPerM, outPerM: provider.outPerM },
       emit,
       approve: async () => false, // comparisons never run unapproved commands
     });
 
     rows.push({
-      model,
+      provider: name,
+      model: provider.model,
       status: result.status,
       langkah: result.totals.steps,
       token_in: result.totals.input_tokens,

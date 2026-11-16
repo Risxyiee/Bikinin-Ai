@@ -343,7 +343,7 @@ export async function runAgent(d: AgentDeps): Promise<AgentResult> {
       tokens.input += res.usage.input_tokens;
       tokens.output += res.usage.output_tokens;
       tokens.cached += res.usage.cached_tokens;
-      const cost = costUsd(res.usage, d.prices);
+      const cost = res.costUsd ?? costUsd(res.usage, d.prices);
       budget.addCost(cost);
       emit("usage", {
         step: budget.steps,

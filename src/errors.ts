@@ -9,6 +9,8 @@ export class AgentError extends Error {
     readonly code: ErrorCode,
     message: string,
     readonly retryable = false,
+    /** True when another provider may succeed (429, 5xx, 402, network). */
+    readonly fallback = false,
   ) {
     super(message);
     this.name = "AgentError";

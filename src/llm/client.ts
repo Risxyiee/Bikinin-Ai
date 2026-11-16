@@ -37,6 +37,10 @@ export interface ChatResult {
   text: string;
   toolCalls: ToolCallReq[];
   usage: Usage;
+  /** Set by the fallback client; the loop falls back to env prices when absent. */
+  costUsd?: number;
+  provider?: string;
+  model?: string;
 }
 
 export interface LlmClient {
@@ -68,6 +72,7 @@ function classify(err: unknown): { retryable: boolean; error: AgentError } {
         "provider_error",
         "Gagal terhubung ke penyedia (jaringan/timeout)",
         true,
+        true,
       ),
     };
   }
@@ -80,6 +85,18 @@ function classify(err: unknown): { retryable: boolean; error: AgentError } {
           "rate_limited",
           "Kena rate limit penyedia (429)",
           true,
+          true,
+        ),
+      };
+    }
+    if (status === 402) {
+      return {
+        retryable: false,
+        error: new AgentError(
+          "provider_error",
+          "Saldo atau kuota penyedia habis (402)",
+          false,
+          true,
         ),
       };
     }
@@ -89,6 +106,7 @@ function classify(err: unknown): { retryable: boolean; error: AgentError } {
         error: new AgentError(
           "provider_error",
           `Penyedia error ${status}`,
+          true,
           true,
         ),
       };
