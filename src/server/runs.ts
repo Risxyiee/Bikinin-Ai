@@ -12,6 +12,7 @@ import type { z } from "zod";
 import { createEmitter, StartRunBody, type AgentEvent } from "../events.js";
 import type { LlmClient } from "../llm/client.js";
 import { createFallbackLlm } from "../llm/fallback.js";
+import { MAX_SESSIONS, SessionHistory } from "../agent/history.js";
 
 export interface RunRecord {
   runId: string;
@@ -34,6 +35,7 @@ export class BusyError extends Error {}
 export class RunManager {
   private readonly runs = new Map<string, RunRecord>();
   private activeRunId: string | null = null;
+  private readonly sessions = new Map<string, SessionHistory>();
 
   constructor(
     private readonly cfg: Config,
@@ -63,7 +65,19 @@ export class RunManager {
       throw new BusyError("masih ada run yang berjalan");
 
     const runId = `run_${randomUUID().slice(0, 8)}`;
-    const sessionId = body.session_id ?? `s_${randomUUID().slice(0, 8)}`;
+    // Only reuse a session id this server issued; anything else starts a new session.
+    const sessionId =
+      body.session_id && this.sessions.has(body.session_id)
+        ? body.session_id
+        : `s_${randomUUID().slice(0, 8)}`;
+    if (!this.sessions.has(sessionId)) {
+      this.sessions.set(sessionId, new SessionHistory());
+      while (this.sessions.size > MAX_SESSIONS) {
+        const oldest = this.sessions.keys().next().value;
+        if (oldest === undefined) break;
+        this.sessions.delete(oldest);
+      }
+    }
     const rec: RunRecord = {
       runId,
       sessionId,
@@ -102,8 +116,9 @@ export class RunManager {
     approve: AgentDeps["approve"],
   ): Promise<void> {
     const primary = this.cfg.providers[0];
+    const history = this.sessions.get(rec.sessionId);
     try {
-      await runAgent({
+      const result = await runAgent({
         llm: this.opts.llm ?? createFallbackLlm(this.cfg.providers),
         model: primary.model,
         systemPrompt: this.opts.systemPrompt,
@@ -118,7 +133,9 @@ export class RunManager {
         emit,
         approve,
         signal: rec.abort.signal,
+        history: history?.messages(),
       });
+      history?.add(result.transcript);
     } catch (err) {
       // runAgent normally always emits run_finished; this is a last-resort guard.
       if (!rec.finished) {

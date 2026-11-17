@@ -125,7 +125,9 @@ describe("web server", () => {
     expect(font.status).toBe(200);
     expect(font.headers.get("content-type")).toBe("font/woff2");
     expect((await fetch(`${url}/fonts/../src/events.ts`)).status).toBe(404);
-    expect(page.headers.get("content-security-policy")).not.toContain("googleapis");
+    expect(page.headers.get("content-security-policy")).not.toContain(
+      "googleapis",
+    );
   });
 
   it("runs an agent end to end and streams ordered SSE events", async () => {
@@ -218,6 +220,71 @@ describe("web server", () => {
     await waitFor(() => rec.finished);
     const last = rec.events.at(-1);
     expect(last?.type).toBe("run_finished");
+  });
+
+  it("remembers earlier messages of the same session, and forgets for a new one", async () => {
+    const seen: string[][] = [];
+    const responses = [
+      finalText("Halo Rizqi."),
+      finalText("Namamu Rizqi."),
+      finalText("Aku tidak tahu."),
+    ];
+    let i = 0;
+    const llm: LlmClient = {
+      async chat(p) {
+        seen.push(
+          p.messages.map((m) =>
+            typeof m.content === "string" ? m.content : "",
+          ),
+        );
+        return responses[i++];
+      },
+    };
+    const base = await mkdtemp(join(tmpdir(), "bikinin-mem-"));
+    await mkdir(join(base, "ws"));
+    const workspace = await realpath(join(base, "ws"));
+    const manager = new RunManager(cfg, {
+      workspace,
+      systemPrompt: "sys",
+      llm,
+    });
+    const server = createAppServer(manager, workspace);
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    open.push(
+      () =>
+        new Promise<void>((r) => {
+          server.closeAllConnections();
+          server.close(() => r());
+        }),
+    );
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+    const first = (await (
+      await post(`${url}/api/runs`, { message: "namaku Rizqi" })
+    ).json()) as { run_id: string; session_id: string };
+    await (await fetch(`${url}/api/runs/${first.run_id}/events`)).text();
+
+    const second = (await (
+      await post(`${url}/api/runs`, {
+        message: "siapa namaku?",
+        session_id: first.session_id,
+      })
+    ).json()) as { run_id: string; session_id: string };
+    expect(second.session_id).toBe(first.session_id);
+    await (await fetch(`${url}/api/runs/${second.run_id}/events`)).text();
+    expect(seen[1]).toContain("namaku Rizqi");
+    expect(seen[1]).toContain("Halo Rizqi.");
+
+    // an id the server never issued must not read anyone's history
+    const third = (await (
+      await post(`${url}/api/runs`, {
+        message: "siapa namaku?",
+        session_id: "s_deadbeef",
+      })
+    ).json()) as { run_id: string; session_id: string };
+    expect(third.session_id).not.toBe("s_deadbeef");
+    await (await fetch(`${url}/api/runs/${third.run_id}/events`)).text();
+    expect(seen[2]).not.toContain("namaku Rizqi");
   });
 
   it("validates request bodies", async () => {

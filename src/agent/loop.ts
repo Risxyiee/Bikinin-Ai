@@ -39,6 +39,8 @@ export interface AgentDeps {
   emit: EmitFn;
   approve: (req: ApprovalRequest) => Promise<boolean>;
   signal?: AbortSignal;
+  /** Earlier messages of this session (after the system prompt), replayed before the new message. */
+  history?: ChatCompletionMessageParam[];
 }
 
 export interface AgentResult {
@@ -48,6 +50,8 @@ export interface AgentResult {
   durationMs: number;
   filesCreated: string[];
   filesChanged: string[];
+  /** This run's messages after the system prompt (user, assistant, tool). Store with SessionHistory. */
+  transcript: ChatCompletionMessageParam[];
 }
 
 interface ToolOutput {
@@ -130,6 +134,7 @@ export async function runAgent(d: AgentDeps): Promise<AgentResult> {
       durationMs,
       filesCreated: [...created],
       filesChanged: [...changed],
+      transcript: messages.slice(1 + priorCount),
     };
   };
 
@@ -305,8 +310,11 @@ export async function runAgent(d: AgentDeps): Promise<AgentResult> {
     limits: { max_steps: d.limits.maxSteps, max_cost_usd: d.limits.maxCostUsd },
   });
 
+  const prior = d.history ?? [];
+  const priorCount = prior.length;
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: d.systemPrompt },
+    ...prior,
     { role: "user", content: d.message },
   ];
   const tools = toolSpecsForLlm();
@@ -358,6 +366,9 @@ export async function runAgent(d: AgentDeps): Promise<AgentResult> {
       flushAlerts();
 
       if (res.toolCalls.length === 0) {
+        // Keep the final answer in the transcript so the next run remembers it.
+        if (res.text.trim())
+          messages.push({ role: "assistant", content: res.text });
         return finish("completed", res.text.trim() || "Selesai.");
       }
       if (budget.costExceeded()) {
