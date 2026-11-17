@@ -121,6 +121,11 @@ describe("web server", () => {
     expect(config).not.toContain("SECRET_KEY_VALUE");
     expect(config).not.toContain("x.test");
     expect((await fetch(`${url}/md.js`)).status).toBe(200);
+    const font = await fetch(`${url}/fonts/inter-latin-wght-normal.woff2`);
+    expect(font.status).toBe(200);
+    expect(font.headers.get("content-type")).toBe("font/woff2");
+    expect((await fetch(`${url}/fonts/../src/events.ts`)).status).toBe(404);
+    expect(page.headers.get("content-security-policy")).not.toContain("googleapis");
   });
 
   it("runs an agent end to end and streams ordered SSE events", async () => {

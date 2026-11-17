@@ -23,6 +23,9 @@ const ASSETS: Record<string, { file: string; type: string }> = {
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
   "/app.css": { file: "app.css", type: "text/css; charset=utf-8" },
   "/md.js": { file: "md.js", type: "text/javascript; charset=utf-8" },
+  "/fonts/inter-latin-wght-normal.woff2": { file: "fonts/inter-latin-wght-normal.woff2", type: "font/woff2" },
+  "/fonts/source-serif-4-latin-wght-normal.woff2": { file: "fonts/source-serif-4-latin-wght-normal.woff2", type: "font/woff2" },
+  "/fonts/source-serif-4-latin-wght-italic.woff2": { file: "fonts/source-serif-4-latin-wght-italic.woff2", type: "font/woff2" },
 };
 
 const SECURITY_HEADERS = {
