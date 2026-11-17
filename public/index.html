@@ -2,142 +2,96 @@
 <html lang="id">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#02050c" />
+    <meta name="theme-color" content="#05060b" />
     <title>Bikinin AI</title>
     <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
-    <div class="bg" aria-hidden="true"></div>
-
     <div class="shell">
-      <header class="top">
+      <header class="app-head">
         <div class="brand">
-          <div class="gem" aria-hidden="true">◆</div>
+          <span class="logo-tile" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17.5V3.5"/><path d="M8 7.1h4.45a4.95 4.9 0 0 1 0 9.8H8"/></svg>
+          </span>
           <div class="titles">
-            <h1>Bikinin AI</h1>
-            <p id="model" class="sub">memuat…</p>
+            <span class="wordmark">Bikinin<span class="ai grad-text">AI</span></span>
+            <span id="model" class="model-sub">memuat…</span>
           </div>
         </div>
-        <div id="status" class="pill">
-          <span class="dot"></span>
-          <span id="statusText">Siap</span>
+        <div class="head-right">
+          <span id="status" class="status-pill"><span class="dot"></span><span id="statusText">Siap</span></span>
+          <button class="ring-btn" id="ringBtn" type="button" aria-label="Langkah agent terpakai">
+            <svg viewBox="0 0 36 36"><circle class="ring-track" cx="18" cy="18" r="15.5"/><circle class="ring-arc" id="ringArc" cx="18" cy="18" r="15.5"/></svg>
+            <span id="ringLabel">0/0</span>
+          </button>
+          <button class="icon-btn" id="newBtn" type="button" aria-label="Mulai sesi baru" title="Sesi baru">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          </button>
         </div>
       </header>
 
-      <section class="meters" aria-label="Pemakaian">
-        <div class="meter">
-          <span class="label">Langkah</span>
-          <strong id="steps">0 / 0</strong>
-          <div class="bar"><i id="stepsBar"></i></div>
-        </div>
-        <div class="meter">
-          <span class="label">Biaya</span>
-          <strong id="cost">$0.0000</strong>
-          <span id="costIdr" class="rp">≈ Rp 0</span>
-        </div>
-      </section>
-
       <main id="feed" class="feed" aria-live="polite">
         <div id="empty" class="empty">
-          <div class="emblem" aria-hidden="true">◆</div>
+          <span class="logo-tile big" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 17.5V3.5"/><path d="M8 7.1h4.45a4.95 4.9 0 0 1 0 9.8H8"/></svg>
+          </span>
           <h2>Mau dibuatkan apa?</h2>
-          <p>
-            Ceritakan saja. Agent menulis kode, mengujinya, dan menyimpan
-            hasilnya.
-          </p>
+          <p>Tulis perintah. Agent menulis kode, mengujinya, lalu menyimpan hasilnya.</p>
           <div class="chips">
-            <button
-              type="button"
-              class="chip"
-              data-prompt="Buat landing page kedai kopi dengan nuansa biru gelap yang mewah"
-            >
-              Landing page kedai kopi
-            </button>
-            <button
-              type="button"
-              class="chip"
-              data-prompt="Buat portofolio fotografer dengan galeri dan form kontak"
-            >
-              Portofolio fotografer
-            </button>
-            <button
-              type="button"
-              class="chip"
-              data-prompt="Buat halaman harga untuk aplikasi SaaS dengan tiga paket"
-            >
-              Halaman harga SaaS
-            </button>
-            <button
-              type="button"
-              class="chip"
-              data-prompt="Buat undangan pernikahan elegan dengan hitung mundur"
-            >
-              Undangan pernikahan
-            </button>
+            <button type="button" class="chip" data-prompt="Buat landing page kedai kopi dengan nuansa biru gelap yang mewah">Landing page kedai kopi</button>
+            <button type="button" class="chip" data-prompt="Buat portofolio fotografer dengan galeri dan form kontak">Portofolio fotografer</button>
+            <button type="button" class="chip" data-prompt="Buat halaman harga untuk aplikasi SaaS dengan tiga paket">Halaman harga SaaS</button>
+            <button type="button" class="chip" data-prompt="Buat undangan pernikahan elegan dengan hitung mundur">Undangan pernikahan</button>
           </div>
         </div>
       </main>
 
       <details id="activity" class="panel hidden">
-        <summary>
-          Langkah agent <span id="stepCount" class="count"></span>
-        </summary>
+        <summary>Langkah agent <span id="stepCount" class="count"></span></summary>
         <ol id="stepList" class="steps"></ol>
       </details>
 
       <section id="results" class="panel hidden" aria-label="Hasil">
         <h3>Hasil</h3>
         <ul id="fileList" class="files"></ul>
-        <div id="previewWrap" class="hidden">
-          <div class="preview-head">
-            <span>Pratinjau</span>
-            <a id="previewOpen" target="_blank" rel="noopener noreferrer"
-              >Buka di tab baru ↗</a
-            >
-          </div>
-          <iframe
-            id="preview"
-            sandbox="allow-scripts"
-            title="Pratinjau hasil"
-            loading="lazy"
-          ></iframe>
-        </div>
       </section>
 
       <form id="composer" class="composer" autocomplete="off">
-        <textarea
-          id="input"
-          rows="1"
-          maxlength="8000"
-          placeholder="Tulis perintah…"
-          aria-label="Perintah"
-        ></textarea>
-        <button
-          id="stop"
-          type="button"
-          class="btn stop hidden"
-          aria-label="Hentikan"
-        >
-          <span aria-hidden="true">■</span> Hentikan
-        </button>
-        <button id="send" type="submit" class="btn primary" disabled>
-          Kirim
-        </button>
+        <div class="cbox">
+          <textarea id="input" rows="1" maxlength="8000" placeholder="Tulis perintah atau revisi tampilan…" aria-label="Perintah untuk agent"></textarea>
+          <div class="crow">
+            <span class="mpill"><span class="mdot"></span><b id="modelLabel">Model dari konfigurasi</b></span>
+            <span class="grow"></span>
+            <button id="stop" type="button" class="stop-btn hidden" aria-label="Hentikan agent">
+              <span aria-hidden="true">■</span> Hentikan
+            </button>
+            <button id="send" type="submit" class="send" aria-label="Kirim" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="foot-note">Revisi bisa kapan saja setelah hasil jadi. Contoh: “mode terang”, “tambah harga”.</div>
       </form>
     </div>
 
-    <div
-      id="sheet"
-      class="sheet hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="sheetTitle"
-    >
+    <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-label="Pratinjau hasil">
+      <div class="overlay-bar">
+        <div class="ov-vp" role="group" aria-label="Ukuran layar">
+          <button type="button" class="active" data-vp="desktop" aria-label="Layar desktop">Desktop</button>
+          <button type="button" data-vp="mobile" aria-label="Layar mobile">Mobile 390×844</button>
+        </div>
+        <button type="button" class="ov-act" id="ovRefresh">Muat ulang</button>
+        <a class="ov-act" id="ovNewTab" target="_blank" rel="noopener noreferrer">Tab baru ↗</a>
+        <button type="button" class="ov-close" id="closeOverlay" aria-label="Tutup pratinjau">×</button>
+      </div>
+      <div class="ov-stage" id="ovStage">
+        <iframe id="preview" sandbox="allow-scripts" title="Pratinjau hasil agent"></iframe>
+      </div>
+    </div>
+
+    <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
       <div class="sheet-card">
         <p class="kicker">Perlu persetujuanmu</p>
         <h2 id="sheetTitle">Jalankan perintah ini?</h2>

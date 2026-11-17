@@ -4,33 +4,17 @@ import { parseBlocks } from "/md.js";
 
 const $ = (id) => document.getElementById(id);
 const el = {
-  model: $("model"),
-  status: $("status"),
-  statusText: $("statusText"),
-  steps: $("steps"),
-  stepsBar: $("stepsBar"),
-  cost: $("cost"),
-  costIdr: $("costIdr"),
-  feed: $("feed"),
-  empty: $("empty"),
-  activity: $("activity"),
-  stepList: $("stepList"),
-  stepCount: $("stepCount"),
-  results: $("results"),
-  fileList: $("fileList"),
-  previewWrap: $("previewWrap"),
-  preview: $("preview"),
-  previewOpen: $("previewOpen"),
-  composer: $("composer"),
-  input: $("input"),
-  send: $("send"),
-  stop: $("stop"),
-  sheet: $("sheet"),
-  sheetReason: $("sheetReason"),
-  sheetCmd: $("sheetCmd"),
-  allow: $("allow"),
-  deny: $("deny"),
-  toast: $("toast"),
+  model: $("model"), status: $("status"), statusText: $("statusText"),
+  ringArc: $("ringArc"), ringLabel: $("ringLabel"), ringBtn: $("ringBtn"),
+  feed: $("feed"), empty: $("empty"),
+  activity: $("activity"), stepList: $("stepList"), stepCount: $("stepCount"),
+  results: $("results"), fileList: $("fileList"),
+  overlay: $("overlay"), preview: $("preview"), ovRefresh: $("ovRefresh"), ovNewTab: $("ovNewTab"),
+  closeOverlay: $("closeOverlay"), ovVp: document.querySelector(".ov-vp"), ovStage: $("ovStage"),
+  composer: $("composer"), input: $("input"), send: $("send"), stop: $("stop"),
+  modelLabel: $("modelLabel"), newBtn: $("newBtn"),
+  sheet: $("sheet"), sheetReason: $("sheetReason"), sheetCmd: $("sheetCmd"),
+  allow: $("allow"), deny: $("deny"), toast: $("toast"),
 };
 
 const state = {
@@ -70,19 +54,22 @@ function toast(text) {
 }
 
 function setStatus(kind, text) {
-  el.status.className = "pill " + kind;
+  el.status.className = "status-pill " + kind;
   el.statusText.textContent = text;
 }
 
+const RING_C = 2 * Math.PI * 15.5;
+
 function setMeters(steps, cost) {
   const max = state.cfg ? state.cfg.max_steps : 0;
-  el.steps.textContent = steps + " / " + max;
-  const pct = max > 0 ? Math.min(100, (steps / max) * 100) : 0;
-  el.stepsBar.style.width = pct + "%";
-  el.stepsBar.classList.toggle("danger", pct >= 80);
-  el.cost.textContent = fmtUsd(cost);
-  el.costIdr.textContent = fmtIdr(cost);
+  const pct = max > 0 ? Math.min(1, steps / max) : 0;
+  el.ringArc.style.strokeDasharray = String(RING_C);
+  el.ringArc.style.strokeDashoffset = String(RING_C * (1 - pct));
+  el.ringArc.classList.toggle("danger", pct >= 0.8);
+  el.ringLabel.textContent = `${steps}/${max}`;
+  el.ringBtn.title = `Langkah ${steps} dari ${max} · ${fmtUsd(cost)} (${fmtIdr(cost)})`;
   el.stepCount.textContent = steps ? `(${steps})` : "";
+  if (state.cfg) el.model.textContent = `${state.cfg.model} · ${fmtUsd(cost)}`;
 }
 
 function setBusy(busy) {
@@ -253,7 +240,7 @@ function resetRun() {
   state.files.clear();
   el.stepList.replaceChildren();
   el.fileList.replaceChildren();
-  el.previewWrap.classList.add("hidden");
+  closeOverlayView();
   el.preview.removeAttribute("src");
   el.activity.classList.add("hidden");
   el.activity.removeAttribute("open");
@@ -264,8 +251,20 @@ function resetRun() {
 function showPreview(path) {
   const url = "/preview/" + path.split("/").map(encodeURIComponent).join("/");
   el.preview.src = url;
-  el.previewOpen.href = url;
-  el.previewWrap.classList.remove("hidden");
+  el.ovNewTab.href = url;
+  el.overlay.classList.remove("hidden");
+  setViewport("desktop");
+}
+
+function setViewport(mode) {
+  for (const b of el.ovVp.querySelectorAll("button")) b.classList.toggle("active", b.dataset.vp === mode);
+  const mobile = mode === "mobile";
+  el.ovStage.classList.toggle("is-mobile", mobile);
+  el.preview.classList.toggle("is-mobile", mobile);
+}
+
+function closeOverlayView() {
+  el.overlay.classList.add("hidden");
 }
 
 function addFile(path, op) {
@@ -283,7 +282,15 @@ function addFile(path, op) {
   const name = document.createElement("span");
   name.textContent = path;
   row.append(mark, name);
-  if (/\.html?$/i.test(path)) showPreview(path);
+  if (/\.html?$/i.test(path)) {
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "copy";
+    open.textContent = "Pratinjau";
+    open.addEventListener("click", () => showPreview(path));
+    row.append(open);
+    showPreview(path);
+  }
 }
 
 // ---------- Approval ----------
@@ -524,6 +531,23 @@ document.querySelectorAll(".chip").forEach((chip) => {
     updateSendState();
     el.input.focus();
   });
+});
+
+el.ovRefresh.addEventListener("click", () => {
+  if (el.preview.src) el.preview.src = el.preview.src;
+});
+el.closeOverlay.addEventListener("click", closeOverlayView);
+el.ovVp.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-vp]");
+  if (b) setViewport(b.dataset.vp);
+});
+el.newBtn.addEventListener("click", () => {
+  if (state.busy) return;
+  state.runId = null;
+  el.feed.replaceChildren(el.empty);
+  el.empty.classList.remove("hidden");
+  resetRun();
+  el.input.focus();
 });
 
 el.stop.addEventListener("click", async () => {
