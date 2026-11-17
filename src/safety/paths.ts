@@ -74,20 +74,30 @@ const PROJECT_MARKERS = [".git", "package.json"];
 
 /**
  * The workspace must not sit inside a project. Otherwise tools like git or npm walk up
- * and act on the app's own repository. Throws if any folder from the workspace upward
- * contains a project marker. The message names the marker, never a full path.
+ * and act on the app's own repository.
+ * - Every parent folder is checked for .git and package.json.
+ * - The workspace itself may hold a package.json (the agent builds Node projects there),
+ *   but not a .git, which would make the whole folder look like a repository.
+ * The message names the marker, never a full path.
  */
 export async function assertWorkspaceIsolated(
   workspace: string,
 ): Promise<void> {
-  let cur = workspace;
+  const fail = (marker: string, where: string) =>
+    new AgentError(
+      "path_blocked",
+      `workspace ${where} (ditemukan ${marker}). Pakai folder di luar repo, misalnya ~/bikinin-workspace, lalu atur BIKININ_WORKSPACE.`,
+    );
+
+  if (await pathExists(join(workspace, ".git"))) {
+    throw fail(".git", "berisi repositori git");
+  }
+
+  let cur = dirname(workspace);
   for (;;) {
     for (const marker of PROJECT_MARKERS) {
       if (await pathExists(join(cur, marker))) {
-        throw new AgentError(
-          "path_blocked",
-          `workspace berada di dalam project (ditemukan ${marker}). Pakai folder di luar repo, misalnya ~/bikinin-workspace, lalu atur BIKININ_WORKSPACE.`,
-        );
+        throw fail(marker, "berada di dalam project");
       }
     }
     const parent = dirname(cur);

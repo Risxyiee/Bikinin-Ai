@@ -20,6 +20,21 @@ describe("assertWorkspaceIsolated", () => {
     await expect(assertWorkspaceIsolated(ws)).rejects.toThrow("package.json");
   });
 
+  it("accepts a workspace that holds its own package.json (agent-built project)", async () => {
+    const base = await mkdtemp(join(tmpdir(), "bikinin-iso-"));
+    const ws = join(base, "ws");
+    await mkdir(ws);
+    await writeFile(join(ws, "package.json"), "{}");
+    await expect(assertWorkspaceIsolated(ws)).resolves.toBeUndefined();
+  });
+
+  it("rejects a workspace that is itself a git repository", async () => {
+    const base = await mkdtemp(join(tmpdir(), "bikinin-iso-"));
+    const ws = join(base, "ws");
+    await mkdir(join(ws, ".git"), { recursive: true });
+    await expect(assertWorkspaceIsolated(ws)).rejects.toThrow(".git");
+  });
+
   it("rejects a workspace inside a git repository", async () => {
     const base = await mkdtemp(join(tmpdir(), "bikinin-iso-"));
     await mkdir(join(base, ".git"));
