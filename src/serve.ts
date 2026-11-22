@@ -4,6 +4,8 @@ import { assertWorkspaceIsolated } from "./safety/paths.js";
 import { loadConfig } from "./config.js";
 import { loadSystemPrompt } from "./prompt.js";
 import { createAppServer } from "./server/http.js";
+import { Catalog } from "./llm/catalog.js";
+import { defaultConfigDir, ProviderStore } from "./llm/store.js";
 import { RunManager } from "./server/runs.js";
 
 function flag(name: string, fallback: string): string {
@@ -21,9 +23,14 @@ async function main(): Promise<void> {
   await mkdir(cfg.BIKININ_WORKSPACE, { recursive: true });
   const workspace = await realpath(cfg.BIKININ_WORKSPACE);
   await assertWorkspaceIsolated(workspace);
+  const catalog = new Catalog(
+    cfg.providers,
+    new ProviderStore(defaultConfigDir()),
+  );
   const manager = new RunManager(cfg, {
     workspace,
     systemPrompt: await loadSystemPrompt(),
+    catalog,
   });
 
   createAppServer(manager, workspace).listen(port, host, () => {

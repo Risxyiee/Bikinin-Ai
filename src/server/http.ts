@@ -9,10 +9,12 @@ import {
 import { readFile, stat } from "node:fs/promises";
 import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import { AgentError } from "../errors.js";
+import { CatalogError, type Catalog } from "../llm/catalog.js";
 import { ApprovalBody, StartRunBody, toSSE } from "../events.js";
 import { resolveInWorkspace } from "../safety/paths.js";
-import { BusyError, type RunManager } from "./runs.js";
+import { BusyError, UnknownModelError, type RunManager } from "./runs.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../../public/", import.meta.url));
 const MAX_BODY = 64 * 1024;
@@ -23,9 +25,18 @@ const ASSETS: Record<string, { file: string; type: string }> = {
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
   "/app.css": { file: "app.css", type: "text/css; charset=utf-8" },
   "/md.js": { file: "md.js", type: "text/javascript; charset=utf-8" },
-  "/fonts/inter-latin-wght-normal.woff2": { file: "fonts/inter-latin-wght-normal.woff2", type: "font/woff2" },
-  "/fonts/source-serif-4-latin-wght-normal.woff2": { file: "fonts/source-serif-4-latin-wght-normal.woff2", type: "font/woff2" },
-  "/fonts/source-serif-4-latin-wght-italic.woff2": { file: "fonts/source-serif-4-latin-wght-italic.woff2", type: "font/woff2" },
+  "/fonts/inter-latin-wght-normal.woff2": {
+    file: "fonts/inter-latin-wght-normal.woff2",
+    type: "font/woff2",
+  },
+  "/fonts/source-serif-4-latin-wght-normal.woff2": {
+    file: "fonts/source-serif-4-latin-wght-normal.woff2",
+    type: "font/woff2",
+  },
+  "/fonts/source-serif-4-latin-wght-italic.woff2": {
+    file: "fonts/source-serif-4-latin-wght-italic.woff2",
+    type: "font/woff2",
+  },
 };
 
 const SECURITY_HEADERS = {
@@ -92,7 +103,18 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+function guardMutation(req: IncomingMessage): void {
+  // Browsers label cross-site requests; refuse them so another website cannot drive this app.
+  const site = req.headers["sec-fetch-site"];
+  if (typeof site === "string" && site !== "same-origin" && site !== "none") {
+    throw new HttpError(403, "permintaan lintas situs ditolak");
+  }
+}
+
 async function readJson(req: IncomingMessage): Promise<unknown> {
+  const type = String(req.headers["content-type"] ?? "").toLowerCase();
+  if (!type.startsWith("application/json"))
+    throw new HttpError(415, "Content-Type harus application/json");
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -206,6 +228,45 @@ function streamEvents(
   req.on("close", cleanup);
 }
 
+const AddProviderBody = z.object({
+  name: z.string().min(1).max(32),
+  baseUrl: z.string().min(1).max(300),
+  apiKey: z.string().min(1).max(600),
+});
+const SetModelsBody = z.object({
+  models: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(200),
+        inPerM: z.number().min(0).max(1000),
+        outPerM: z.number().min(0).max(1000),
+      }),
+    )
+    .max(50),
+});
+const TestBody = z.object({ model: z.string().min(1).max(200).optional() });
+const SettingsBody = z.object({
+  fallback: z.boolean().optional(),
+  default: z.string().min(1).max(260).nullable().optional(),
+});
+
+function modelsPayload(catalog: Catalog) {
+  const s = catalog.settings();
+  return {
+    default: s.default,
+    fallback: s.fallback,
+    choices: catalog.choices().map((c) => ({
+      id: c.id,
+      provider: c.providerName,
+      model: c.model,
+      in: c.inPerM,
+      out: c.outPerM,
+      free: c.inPerM === 0 && c.outPerM === 0,
+      source: c.source,
+    })),
+  };
+}
+
 async function route(
   req: IncomingMessage,
   res: ServerResponse,
@@ -226,6 +287,59 @@ async function route(
     return sendJson(res, 200, manager.info());
   }
 
+  if (method !== "GET" && method !== "HEAD") guardMutation(req);
+
+  const cat = manager.catalog;
+  if (method === "GET" && path === "/api/models")
+    return sendJson(res, 200, modelsPayload(cat));
+  if (method === "GET" && path === "/api/providers")
+    return sendJson(res, 200, { providers: cat.providers() });
+
+  if (method === "POST" && path === "/api/providers") {
+    const parsed = AddProviderBody.safeParse(await readJson(req));
+    if (!parsed.success) throw new HttpError(400, "isi provider tidak valid");
+    return sendJson(res, 201, cat.addProvider(parsed.data));
+  }
+
+  if (method === "PUT" && path === "/api/settings") {
+    const parsed = SettingsBody.safeParse(await readJson(req));
+    if (!parsed.success) throw new HttpError(400, "isi pengaturan tidak valid");
+    cat.setSettings(parsed.data);
+    return sendJson(res, 200, modelsPayload(cat));
+  }
+
+  const pm = path.match(
+    /^\/api\/providers\/([a-z0-9-]{1,40})(?:\/(discover|models|test))?$/,
+  );
+  if (pm) {
+    const [, id, action] = pm;
+    if (method === "DELETE" && !action) {
+      cat.removeProvider(id);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (method === "POST" && action === "discover") {
+      try {
+        return sendJson(res, 200, { models: await manager.discover(id) });
+      } catch (err) {
+        if (err instanceof CatalogError) throw err;
+        throw new HttpError(
+          502,
+          err instanceof Error ? err.message : "gagal menghubungi provider",
+        );
+      }
+    }
+    if (method === "PUT" && action === "models") {
+      const parsed = SetModelsBody.safeParse(await readJson(req));
+      if (!parsed.success) throw new HttpError(400, "daftar model tidak valid");
+      return sendJson(res, 200, cat.setModels(id, parsed.data.models));
+    }
+    if (method === "POST" && action === "test") {
+      const parsed = TestBody.safeParse(await readJson(req));
+      if (!parsed.success) throw new HttpError(400, "isi tes tidak valid");
+      return sendJson(res, 200, await manager.probe(id, parsed.data.model));
+    }
+  }
+
   if (method === "POST" && path === "/api/runs") {
     const parsed = StartRunBody.safeParse(await readJson(req));
     if (!parsed.success) throw new HttpError(400, "isi permintaan tidak valid");
@@ -233,6 +347,8 @@ async function route(
       return sendJson(res, 201, manager.start(parsed.data));
     } catch (err) {
       if (err instanceof BusyError) throw new HttpError(409, err.message);
+      if (err instanceof UnknownModelError)
+        throw new HttpError(400, err.message);
       throw err;
     }
   }
@@ -279,7 +395,7 @@ export function createAppServer(
         res.end();
         return;
       }
-      if (err instanceof HttpError) {
+      if (err instanceof HttpError || err instanceof CatalogError) {
         sendJson(res, err.status, { error: err.message });
       } else {
         sendJson(res, 500, { error: "internal" });

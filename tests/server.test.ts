@@ -293,9 +293,15 @@ describe("web server", () => {
     expect((await post(`${url}/api/runs`, { nope: 1 })).status).toBe(400);
     const bad = await fetch(`${url}/api/runs`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: "{bukan json",
     });
     expect(bad.status).toBe(400);
+    const plain = await fetch(`${url}/api/runs`, {
+      method: "POST",
+      body: '{"message":"x"}',
+    });
+    expect(plain.status).toBe(415);
     expect((await fetch(`${url}/api/runs/run_deadbeef/events`)).status).toBe(
       404,
     );

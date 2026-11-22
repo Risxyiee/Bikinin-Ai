@@ -12,6 +12,11 @@ import type { z } from "zod";
 import { createEmitter, StartRunBody, type AgentEvent } from "../events.js";
 import type { LlmClient } from "../llm/client.js";
 import { createFallbackLlm } from "../llm/fallback.js";
+import { Catalog, CatalogError } from "../llm/catalog.js";
+import { discoverModels, type FetchLike } from "../llm/discover.js";
+import { probeProvider, type ProbeResult } from "../llm/probe.js";
+import type { ProviderConfig } from "../llm/providers.js";
+import { ProviderStore } from "../llm/store.js";
 import { MAX_SESSIONS, SessionHistory } from "../agent/history.js";
 
 export interface RunRecord {
@@ -28,7 +33,12 @@ export interface RunManagerOptions {
   workspace: string; // absolute realpath
   systemPrompt: string;
   llm?: LlmClient; // tests inject a fake; production uses the provider list
+  catalog?: Catalog; // selectable models; defaults to the env providers only
+  makeClient?: (p: ProviderConfig) => LlmClient; // tests intercept provider calls
+  fetchImpl?: FetchLike; // tests intercept model discovery
 }
+
+export class UnknownModelError extends Error {}
 
 export class BusyError extends Error {}
 
@@ -37,20 +47,43 @@ export class RunManager {
   private activeRunId: string | null = null;
   private readonly sessions = new Map<string, SessionHistory>();
 
+  readonly catalog: Catalog;
+
   constructor(
     private readonly cfg: Config,
     private readonly opts: RunManagerOptions,
-  ) {}
+  ) {
+    this.catalog =
+      opts.catalog ?? new Catalog(cfg.providers, new ProviderStore(null));
+  }
 
   /** Public, non-secret settings for the UI. Never includes keys or URLs. */
   info() {
-    const primary = this.cfg.providers[0];
+    const def = this.catalog.resolve();
     return {
-      model: primary.model,
+      model: def ? def.selected.model : this.cfg.providers[0].model,
       usd_idr: this.cfg.BIKININ_USD_IDR,
       max_steps: this.cfg.BIKININ_MAX_STEPS,
       max_cost_usd: this.cfg.BIKININ_MAX_COST_USD,
     };
+  }
+
+  /** Asks a user-added provider for its model ids. The key never leaves the server. */
+  async discover(providerId: string): Promise<string[]> {
+    const { baseUrl, apiKey } = this.catalog.credentials(providerId);
+    return discoverModels(baseUrl, apiKey, this.opts.fetchImpl);
+  }
+
+  /** Runs the provider check (chat, streaming, usage, tool calling) for one of its models. */
+  async probe(providerId: string, model?: string): Promise<ProbeResult> {
+    const options = this.catalog
+      .choices()
+      .filter((c) => c.providerId === providerId);
+    if (options.length === 0)
+      throw new CatalogError(400, "Tambahkan minimal satu model dulu");
+    const choice = model ? options.find((c) => c.model === model) : options[0];
+    if (!choice) throw new CatalogError(400, "Model tidak ada di provider ini");
+    return probeProvider(choice.config, this.opts.makeClient);
   }
 
   get(runId: string): RunRecord | undefined {
@@ -63,6 +96,9 @@ export class RunManager {
   } {
     if (this.activeRunId !== null)
       throw new BusyError("masih ada run yang berjalan");
+
+    const resolved = this.catalog.resolve(body.model);
+    if (!resolved) throw new UnknownModelError("model tidak dikenal");
 
     const runId = `run_${randomUUID().slice(0, 8)}`;
     // Only reuse a session id this server issued; anything else starts a new session.
@@ -100,11 +136,13 @@ export class RunManager {
         rec.pending.set(req.approvalId, resolve);
       });
 
-    void this.execute(rec, body.message, emit, approve).finally(() => {
-      for (const resolve of rec.pending.values()) resolve(false);
-      rec.pending.clear();
-      this.activeRunId = null;
-    });
+    void this.execute(rec, body.message, emit, approve, resolved).finally(
+      () => {
+        for (const resolve of rec.pending.values()) resolve(false);
+        rec.pending.clear();
+        this.activeRunId = null;
+      },
+    );
 
     return { run_id: runId, session_id: sessionId };
   }
@@ -114,12 +152,17 @@ export class RunManager {
     message: string,
     emit: EmitFn,
     approve: AgentDeps["approve"],
+    resolved: NonNullable<ReturnType<Catalog["resolve"]>>,
   ): Promise<void> {
-    const primary = this.cfg.providers[0];
+    const primary = resolved.selected;
     const history = this.sessions.get(rec.sessionId);
     try {
       const result = await runAgent({
-        llm: this.opts.llm ?? createFallbackLlm(this.cfg.providers),
+        llm:
+          this.opts.llm ??
+          createFallbackLlm(resolved.chain, {
+            makeClient: this.opts.makeClient,
+          }),
         model: primary.model,
         systemPrompt: this.opts.systemPrompt,
         message,
