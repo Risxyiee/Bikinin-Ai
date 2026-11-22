@@ -738,7 +738,10 @@ function handle(e) {
         /\.html?$/i.test(p),
       );
       if (htmlFiles.length > 0) {
-        const [path, info] = htmlFiles[htmlFiles.length - 1];
+        // Prefer the entry page; otherwise the newest html file.
+        const [path, info] =
+          htmlFiles.find(([p]) => p === "index.html") ??
+          htmlFiles[htmlFiles.length - 1];
         addResult(path, info.bytes);
       }
       if (state.source) state.source.close();
